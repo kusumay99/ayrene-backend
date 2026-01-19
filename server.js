@@ -9,58 +9,102 @@ const bcrypt = require("bcryptjs");
 const User = require("./models/User");
 
 // Routes
-const authRoutes = require("./routes/auth");       // login & register
-const userRoutes = require("./routes/users");      // CRUD for users
-const messageRoutes = require("./routes/messages"); // messages
-const adminRoutes = require("./routes/admin");      // admin dashboard
-const teamRoutes = require("./routes/teams");      // team management
-const reportingRoutes = require("./routes/reporting"); // reporting
-const auditRoutes = require("./routes/audit");     // audit logs
-const singleUserRoutes = require("./routes/user"); // /api/user
+const authRoutes = require("./routes/auth");
+const userRoutes = require("./routes/users");
+const messageRoutes = require("./routes/messages");
+const adminRoutes = require("./routes/admin");
+const teamRoutes = require("./routes/teams");
+const reportingRoutes = require("./routes/reporting");
+const auditRoutes = require("./routes/audit");
+const singleUserRoutes = require("./routes/user");
 
 const app = express();
 
-// Middleware
-app.use(cors({ origin: "http://localhost:3000" }));
+/* =========================
+   CORS CONFIG (FIXED)
+========================= */
+
+const allowedOrigins = [
+  "https://ayrene.com",
+  "https://www.ayrene.com",
+  "http://localhost:3000"
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // allow requests with no origin (mobile apps, curl, postman)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+// Handle preflight requests
+app.options("*", cors());
+
+/* =========================
+   MIDDLEWARE
+========================= */
+
 app.use(express.json());
 app.use(morgan("dev"));
 
-// Routes
-app.use("/api/auth", authRoutes);          // login & register
-app.use("/api/users", userRoutes);         // user CRUD
-app.use("/api/messages", messageRoutes);   // messages
-app.use("/api/admin", adminRoutes);        // admin routes
-app.use("/api/teams", teamRoutes);         // team routes
-app.use("/api/reporting", reportingRoutes); // reporting
-app.use("/api/admin/audit", auditRoutes);  // audit logs
-app.use("/api/user", singleUserRoutes);    // single user operations
+/* =========================
+   ROUTES
+========================= */
+
+app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/messages", messageRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/teams", teamRoutes);
+app.use("/api/reporting", reportingRoutes);
+app.use("/api/admin/audit", auditRoutes);
+app.use("/api/user", singleUserRoutes);
 
 // Health check
-app.get("/", (req, res) => res.send("API is running..."));
+app.get("/", (req, res) => {
+  res.send("API is running...");
+});
 
-// Environment variables
+/* =========================
+   ENV & DB
+========================= */
+
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
-  console.error("❌ MONGODB_URI is not set in .env");
+  console.error("❌ MONGODB_URI is not set");
   process.exit(1);
 }
 
-// Function to create default admin
+// Create default admin
 const createDefaultAdmin = async () => {
   try {
     const adminExists = await User.findOne({ role: "admin" });
+
     if (!adminExists) {
       const hashedPassword = await bcrypt.hash("Admin@123", 10);
+
       const adminUser = new User({
         name: "Super Admin",
         email: "admin@ayrene.com",
         password: hashedPassword,
         role: "admin",
       });
+
       await adminUser.save();
-      console.log("✅ Default admin created: admin@ayrene.com / Admin@123");
+      console.log("✅ Default admin created");
     } else {
       console.log("Admin user already exists.");
     }
@@ -72,19 +116,16 @@ const createDefaultAdmin = async () => {
 // Start server
 const startServer = async () => {
   try {
-    await mongoose.connect(MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    await mongoose.connect(MONGODB_URI);
     console.log("✅ MongoDB connected");
 
     await createDefaultAdmin();
 
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on http://localhost:${PORT}`);
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`🚀 Server running on port ${PORT}`);
     });
   } catch (err) {
-    console.error("❌ Failed to start server:", err.message);
+    console.error("❌ Server startup failed:", err.message);
     process.exit(1);
   }
 };
