@@ -21,34 +21,40 @@ const singleUserRoutes = require("./routes/user");
 const app = express();
 
 /* =========================
-   CORS CONFIG (FIXED)
+   CORS CONFIG (FIXED & SAFE)
 ========================= */
 
 const allowedOrigins = [
+  "http://localhost:3000",
   "https://ayrene.com",
   "https://www.ayrene.com",
-  "http://localhost:3000"
 ];
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // allow requests with no origin (mobile apps, curl, postman)
+    origin: (origin, callback) => {
+      // Allow server-to-server, Postman, curl
       if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
-      } else {
-        return callback(new Error("Not allowed by CORS"));
       }
+
+      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Cache-Control",
+      "Pragma",
+      "Expires",
+    ],
   })
 );
 
-// Handle preflight requests
+// ✅ Proper preflight handling
 app.options("*", cors());
 
 /* =========================
@@ -65,11 +71,13 @@ app.use(morgan("dev"));
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/messages", messageRoutes);
-app.use("/api/admin", adminRoutes);
 app.use("/api/teams", teamRoutes);
 app.use("/api/reporting", reportingRoutes);
-app.use("/api/admin/audit", auditRoutes);
 app.use("/api/user", singleUserRoutes);
+
+// Admin routes
+app.use("/api/admin", adminRoutes);
+app.use("/api/admin/audit", auditRoutes);
 
 // Health check
 app.get("/", (req, res) => {
@@ -88,7 +96,10 @@ if (!MONGODB_URI) {
   process.exit(1);
 }
 
-// Create default admin
+/* =========================
+   CREATE DEFAULT ADMIN
+========================= */
+
 const createDefaultAdmin = async () => {
   try {
     const adminExists = await User.findOne({ role: "admin" });
@@ -96,24 +107,26 @@ const createDefaultAdmin = async () => {
     if (!adminExists) {
       const hashedPassword = await bcrypt.hash("Admin@123", 10);
 
-      const adminUser = new User({
+      await User.create({
         name: "Super Admin",
         email: "admin@ayrene.com",
         password: hashedPassword,
         role: "admin",
       });
 
-      await adminUser.save();
       console.log("✅ Default admin created");
     } else {
-      console.log("Admin user already exists.");
+      console.log("ℹ️ Admin user already exists");
     }
   } catch (err) {
-    console.error("❌ Error creating default admin:", err);
+    console.error("❌ Error creating default admin:", err.message);
   }
 };
 
-// Start server
+/* =========================
+   START SERVER
+========================= */
+
 const startServer = async () => {
   try {
     await mongoose.connect(MONGODB_URI);
@@ -130,7 +143,6 @@ const startServer = async () => {
   }
 };
 
-// Handle unhandled promise rejections
 process.on("unhandledRejection", (err) => {
   console.error("Unhandled Rejection:", err);
   process.exit(1);
