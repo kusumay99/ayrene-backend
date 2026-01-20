@@ -21,9 +21,8 @@ const singleUserRoutes = require("./routes/user");
 const app = express();
 
 /* =========================
-   CORS CONFIG (FIXED & SAFE)
+   CORS CONFIG
 ========================= */
-
 const allowedOrigins = [
   "http://localhost:3000",
   "https://ayrene.com",
@@ -33,61 +32,41 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow server-to-server, Postman, curl
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
+      if (!origin) return callback(null, true); // server-to-server requests
+      if (allowedOrigins.includes(origin)) return callback(null, true);
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "Cache-Control",
-      "Pragma",
-      "Expires",
-    ],
+    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma", "Expires"],
   })
 );
-
-// ✅ Proper preflight handling
-app.options("*", cors());
+app.options("*", cors()); // preflight
 
 /* =========================
    MIDDLEWARE
 ========================= */
-
 app.use(express.json());
 app.use(morgan("dev"));
 
 /* =========================
    ROUTES
 ========================= */
-
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/teams", teamRoutes);
 app.use("/api/reporting", reportingRoutes);
 app.use("/api/user", singleUserRoutes);
-
-// Admin routes
 app.use("/api/admin", adminRoutes);
 app.use("/api/admin/audit", auditRoutes);
 
 // Health check
-app.get("/", (req, res) => {
-  res.send("API is running...");
-});
+app.get("/", (req, res) => res.send("API is running..."));
 
 /* =========================
    ENV & DB
 ========================= */
-
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI;
 
@@ -99,21 +78,17 @@ if (!MONGODB_URI) {
 /* =========================
    CREATE DEFAULT ADMIN
 ========================= */
-
 const createDefaultAdmin = async () => {
   try {
     const adminExists = await User.findOne({ role: "admin" });
-
     if (!adminExists) {
       const hashedPassword = await bcrypt.hash("Admin@123", 10);
-
       await User.create({
         name: "Super Admin",
         email: "admin@ayrene.com",
         password: hashedPassword,
         role: "admin",
       });
-
       console.log("✅ Default admin created");
     } else {
       console.log("ℹ️ Admin user already exists");
@@ -126,7 +101,6 @@ const createDefaultAdmin = async () => {
 /* =========================
    START SERVER
 ========================= */
-
 const startServer = async () => {
   try {
     await mongoose.connect(MONGODB_URI);
@@ -134,6 +108,7 @@ const startServer = async () => {
 
     await createDefaultAdmin();
 
+    // Listen on all interfaces for Nginx proxy
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
@@ -143,6 +118,7 @@ const startServer = async () => {
   }
 };
 
+// Catch unhandled promise rejections
 process.on("unhandledRejection", (err) => {
   console.error("Unhandled Rejection:", err);
   process.exit(1);
